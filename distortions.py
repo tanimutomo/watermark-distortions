@@ -26,11 +26,12 @@ class Dropout(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        mask = self._create_mask(i_co.shape())
+        mask = self._create_mask(i_co.shape)
         return i_en * mask + i_co * (1 - mask)
     
     def _create_mask(self, shape: tuple) -> torch.FloatTensor:
-        torch.where(torch.rand(shape) > self.p, 1, 0)
+        return torch.where(torch.rand(shape) > self.p,
+                           torch.ones(shape), torch.zeros(shape))
 
 
 class Cropout(Distortioner):
@@ -39,7 +40,7 @@ class Cropout(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        mask = self._create_mask(i_co.shape())
+        mask = self._create_mask(i_co.shape)
         return i_en * mask + i_co * (1 - mask)
     
     def _create_mask(self, shape: tuple) -> torch.FloatTensor:
@@ -47,10 +48,10 @@ class Cropout(Distortioner):
         area = h * w
         crop_area = area * self.p
 
-        ch = max([random.random() * min([crop_area, h]), 1])
-        cw = max([area / ch, 1])
+        ch = int(max([random.random() * h, crop_area / w + 1]))
+        cw = int(max([crop_area / ch, 1]))
         h_center_range = (ch//2 + 1, h - (ch//2 + 1))
-        w_center_range = (cw//2 + 1, h - (cw//2 + 1))
+        w_center_range = (cw//2 + 1, w - (cw//2 + 1))
         h_center = random.randint(*h_center_range)
         w_center = random.randint(*w_center_range)
 
@@ -73,10 +74,10 @@ class Crop(Distortioner):
         area = h * w
         crop_area = area * self.p
 
-        ch = max([random.random() * min([crop_area, h]), 1])
-        cw = max([area / ch, 1])
+        ch = int(max([random.random() * h, crop_area / w + 1]))
+        cw = int(max([crop_area / ch, 1]))
         h_center_range = (ch//2 + 1, h - (ch//2 + 1))
-        w_center_range = (cw//2 + 1, h - (cw//2 + 1))
+        w_center_range = (cw//2 + 1, w - (cw//2 + 1))
         h_center = random.randint(*h_center_range)
         w_center = random.randint(*w_center_range)
 
@@ -89,16 +90,17 @@ class Resize(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        return F.interpolate(i_en, self.p)
+        return F.interpolate(i_en, scale_factor=self.p)
 
 
 class GaussianBlur(Distortioner):
-    def __init__(self, s: int):
+    def __init__(self, w, s: int):
+        self.w = w
         self.s = s
     
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.s == 0: return i_en
-        return kornia.filters.gaussian_blur2d(i_en, (self.p, self.p), (1, 1))
+        return kornia.filters.gaussian_blur2d(i_en, (self.w, self.w), (self.s, self.s))
 
 
 class JPEGCompression(Distortioner):
@@ -123,9 +125,10 @@ class JPEGCompression(Distortioner):
             for j in range(n):
                 mat[i, j] = math.sqrt(2/n) \
                            * math.cos((math.pi/n) * i * (j + 0.5))
+        return mat
 
     def _create_idct_basis_matrix(self, n=8) -> torch.FloatTensor:
-        return self._create_dct_basis_matrix(n).transpose()
+        return self._create_dct_basis_matrix(n).transpose(1, 0)
 
     def _mat_to_kernel(self, mat: torch.FloatTensor) -> torch.FloatTensor:
         return mat[None, None, ...].expand(3, 3, -1, -1)
@@ -147,7 +150,6 @@ class JPEGMask(JPEGCompression):
 
 class JPEGDrop(JPEGCompression):
     def __init__(self):
-        super().__init__()
         quantization_table_y = torch.tensor([
             16, 11, 10, 16, 24,  40,  51,  61,
             12, 12, 14, 19, 26,  58,  60,  55,
@@ -157,7 +159,7 @@ class JPEGDrop(JPEGCompression):
             24, 36, 55, 64, 81,  104, 113, 92,
             49, 64, 78, 87, 103, 121, 120, 101,
             72, 92, 95, 98, 112, 100, 103, 99,
-        ]).view(8, 8)
+        ], dtype=torch.float64).view(8, 8)
         quantization_table_uv = torch.tensor([
             17, 18, 24, 47, 99, 99, 99, 99,
             18, 21, 26, 66, 99, 99, 99, 99,
@@ -167,12 +169,15 @@ class JPEGDrop(JPEGCompression):
             99, 99, 99, 99, 99, 99, 99, 99,
             99, 99, 99, 99, 99, 99, 99, 99,
             99, 99, 99, 99, 99, 99, 99, 99,
-        ]).view(8, 8)
-        self.prob_y = quantization_table_y / (quantization_table_y.max()+1)
-        self.prob_uv = quantization_table_uv / 100
+        ], dtype=torch.float64).view(8, 8)
+        self.prob_y = quantization_table_y.div((quantization_table_y.max()+1.0))
+        self.prob_uv = quantization_table_uv.div(100.0)
+        super().__init__()
     
     def _create_compression_kernel(self):
-        kernel_y = torch.where(torch.rand(8, 8) > self.prob_y, 1, 0)
-        kernel_u = torch.where(torch.rand(8, 8) > self.prob_uv, 1, 0)
-        kernel_v = torch.where(torch.rand(8, 8) > self.prob_uv, 1, 0)
+        one = torch.ones(8, 8)
+        zero = torch.zeros(8, 8)
+        kernel_y = torch.where(torch.rand(8, 8) > self.prob_y, one, zero)
+        kernel_u = torch.where(torch.rand(8, 8) > self.prob_uv, one, zero)
+        kernel_v = torch.where(torch.rand(8, 8) > self.prob_uv, one, zero)
         return torch.stack([kernel_y, kernel_u, kernel_v])[None, ...].expand(3, -1, -1, -1)
