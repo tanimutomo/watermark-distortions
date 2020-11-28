@@ -110,16 +110,37 @@ class JPEGCompression(Distortioner):
         self.compression_kernel = self._create_compression_kernel()
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+        _, _, h, w = i_en.shape
+        if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
         x = kornia.color.rgb_to_yuv(i_en)
-        x = self._convolution(x, self.dct_kernel)
-        x = self._convolution(x, self.compression_kernel)
-        x = self._convolution(x, self.idct_kernel)
+        x = self._apply_dct(x, self.dct_kernel)
+        # x = self._apply_mask(x, self.compression_kernel)
+        x = self._apply_dct(x, self.idct_kernel)
         x = kornia.color.yuv_to_rgb(x)
         return x
 
-    def _convolution(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
+    def _apply_dct(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
+        ys = []
+        for i in range(8):
+            basis = k[:, i]
+
+            kernel = torch.zeros(15, 15)
+            kernel[7, 7:] = basis
+            y = F.conv2d(x, self._expand(kernel), stride=(1, 8), padding=(7, 7), groups=3)
+
+            kernel = torch.zeros(15, 15)
+            kernel[7, 7] = 1
+            y = F.conv_transpose2d(y, self._expand(kernel), stride=(1, 8), padding=(7, 7), groups=3)
+
+            y = F.pad(y, (i, 7-i, 0, 0))
+
+            ys.append(y)
+
+        y = torch.stack(ys, dim=0)
+        return torch.sum(y, 0)
+
+    def _apply_mask(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
-        if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
         _, kh, kw = k.shape
         if not (kh == 8 and kw == 8): raise TypeError("k shape is not 8x8")
         return x * k.repeat(1, h//8, w//8)
@@ -132,10 +153,13 @@ class JPEGCompression(Distortioner):
             for j in range(n):
                 mat[i, j] = math.sqrt(2/n) \
                            * math.cos((math.pi/n) * i * (j + 0.5))
-        return mat[None, ...]
+        return mat
 
     def _create_idct_basis_matrix(self) -> torch.FloatTensor:
-        return self._create_dct_basis_matrix(8).transpose(2, 1)
+        return self._create_dct_basis_matrix(8).transpose(1, 0)
+
+    def _expand(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        return x[None, None, ...].expand(3, 1, -1, -1)
 
     def _create_compression_kernel(self) -> torch.FloatTensor:
         raise NotImplementedError()
