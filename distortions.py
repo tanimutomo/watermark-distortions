@@ -87,7 +87,7 @@ class Resize(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        return F.interpolate(i_en, scale_factor=self.p)
+        return F.interpolate(i_en, scale_factor=self.p, recompute_scale_factor=True)
 
 
 class GaussianBlur(Distortioner):
