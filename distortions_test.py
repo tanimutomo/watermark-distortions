@@ -1,18 +1,4 @@
-# # Watermark Distortions
-# 
-# ## List of Distortions
-# - Identity
-# - Dropout
-# - Cropout
-# - Crop
-# - Resize
-# - Gaussian Blur
-# - JPEG Compression
-
-import sys
 import typing
-
-sys.path.append("..")
 
 import matplotlib.pyplot as plt
 import PIL

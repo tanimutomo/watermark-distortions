@@ -1,3 +1,14 @@
+# # Watermark Distortions
+# 
+# ## List of Distortions
+# - Identity
+# - Dropout
+# - Cropout
+# - Crop
+# - Resize
+# - Gaussian Blur
+# - JPEG Compression
+
 import abc
 import math
 import random
@@ -6,7 +17,6 @@ import typing
 import kornia
 import torch
 import torch.nn.functional as F
-import torchvision
 
 
 class Distortioner(object, metaclass=abc.ABCMeta):
