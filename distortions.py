@@ -113,33 +113,43 @@ class JPEGCompression(Distortioner):
         _, _, h, w = i_en.shape
         if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
         x = kornia.color.rgb_to_yuv(i_en)
-        x = self._apply_dct(x, self.dct_kernel)
-        # x = self._apply_mask(x, self.compression_kernel)
-        x = self._apply_dct(x, self.idct_kernel)
+        x = self._apply_dct(x)
+        x = self._compress(x, self.compression_kernel)
+        x = self._apply_idct(x)
         x = kornia.color.yuv_to_rgb(x)
         return x
 
-    def _apply_dct(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
+    def _apply_dct(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        return self._convdot(self._convdot(x, self.dct_kernel, False), self.idct_kernel, True)
+
+    def _apply_idct(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        return self._convdot(self._convdot(x, self.idct_kernel, False), self.dct_kernel, True)
+
+    def _convdot(self, x, k: torch.FloatTensor, dot_x_k: bool) -> torch.FloatTensor:
         ys = []
         for i in range(8):
-            basis = k[:, i]
-
+            basis = k[:, i] if dot_x_k else k[i, :]
             kernel = torch.zeros(15, 15)
-            kernel[7, 7:] = basis
-            y = F.conv2d(x, self._expand(kernel), stride=(1, 8), padding=(7, 7), groups=3)
+            pos = (7, slice(7-i, 15-i)) if dot_x_k else (slice(7-i, 15-i), 7)
+            kernel[pos[0], pos[1]] = basis
+
+            stride = (1, 8) if dot_x_k else (8, 1)
+            pad = (7-i, i, 7, 7) if dot_x_k else (7, 7, 7-i, i)
+            y = F.conv2d(F.pad(x, pad), self._expand(kernel), stride=stride, groups=3)
 
             kernel = torch.zeros(15, 15)
             kernel[7, 7] = 1
-            y = F.conv_transpose2d(y, self._expand(kernel), stride=(1, 8), padding=(7, 7), groups=3)
+            y = F.conv_transpose2d(y, self._expand(kernel), stride=stride, padding=(7, 7), groups=3)
 
-            y = F.pad(y, (i, 7-i, 0, 0))
+            pad = (i, 7-i, 0, 0) if dot_x_k else (0, 0, i, 7-i)
+            y = F.pad(y, pad)
 
             ys.append(y)
 
         y = torch.stack(ys, dim=0)
         return torch.sum(y, 0)
 
-    def _apply_mask(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
+    def _compress(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
         _, kh, kw = k.shape
         if not (kh == 8 and kw == 8): raise TypeError("k shape is not 8x8")
