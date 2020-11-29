@@ -21,6 +21,7 @@ def main():
         "crop": distortions.Crop(0.5),
         "resize": distortions.Resize(0.5),
         "gaussian_blur": distortions.GaussianBlur(5, 2),
+        "jpeg_compression": distortions.JPEGCompression(),
         "jpeg_mask": distortions.JPEGMask(),
         "jpeg_drop": distortions.JPEGDrop()
     }
@@ -31,7 +32,7 @@ def main():
         out = dis(inp, inp)
         outs.append(padding_image(out, inp.shape))
 
-    imsave(torch.cat(outs, dim=0), "./images/distortions.jpg", nrow=4, pad=2)
+    imsave(torch.cat(outs, dim=0), "./images/distortions.jpg", nrow=3, pad=2)
     imshow(F.to_tensor(PIL.Image.open("./images/distortions.jpg")))
 
 
