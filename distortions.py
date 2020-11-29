@@ -56,7 +56,7 @@ class Cropout(Distortioner):
         w_center = random.randint(*w_center_range)
 
         mask = torch.zeros(shape)
-        mask[..., h_center-ch:h_center+ch, w_center-cw:w_center+cw] = 1
+        mask[..., h_center-ch//2:h_center+ch//2, w_center-cw//2:w_center+cw//2] = 1
         return mask
 
 
@@ -66,16 +66,13 @@ class Crop(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        h, w, hc, wc = self._sample_params(i_co.shape)
-        return i_en[..., hc-h : hc+h, wc-w : wc+w]
+        h, w, hc, wc = self._sample_params(i_en.shape)
+        return i_en[..., hc-h//2 : hc+h//2, wc-w//2 : wc+w//2]
     
     def _sample_params(self, shape: tuple) -> typing.Tuple[int, int, int, int]:
         _, _, h, w = shape
-        area = h * w
-        crop_area = area * self.p
+        ch, cw = int(h*self.p), int(w*self.p)
 
-        ch = int(max([random.random() * h, crop_area / w + 1]))
-        cw = int(max([crop_area / ch, 1]))
         h_center_range = (ch//2 + 1, h - (ch//2 + 1))
         w_center_range = (cw//2 + 1, w - (cw//2 + 1))
         h_center = random.randint(*h_center_range)
@@ -188,7 +185,8 @@ class JPEGMask(JPEGCompression):
 
 class JPEGDrop(JPEGCompression):
     def __init__(self):
-        quantization_table_y = torch.tensor([
+        # quantization tables
+        qt_y = torch.tensor([
             16, 11, 10, 16, 24,  40,  51,  61,
             12, 12, 14, 19, 26,  58,  60,  55,
             14, 13, 16, 24, 40,  57,  69,  56,
@@ -198,7 +196,7 @@ class JPEGDrop(JPEGCompression):
             49, 64, 78, 87, 103, 121, 120, 101,
             72, 92, 95, 98, 112, 100, 103, 99,
         ], dtype=torch.float64).view(8, 8)
-        quantization_table_uv = torch.tensor([
+        qt_uv = torch.tensor([
             17, 18, 24, 47, 99, 99, 99, 99,
             18, 21, 26, 66, 99, 99, 99, 99,
             24, 26, 56, 99, 99, 99, 99, 99,
@@ -208,8 +206,8 @@ class JPEGDrop(JPEGCompression):
             99, 99, 99, 99, 99, 99, 99, 99,
             99, 99, 99, 99, 99, 99, 99, 99,
         ], dtype=torch.float64).view(8, 8)
-        self.prob_y = quantization_table_y.div((quantization_table_y.max()+1.0))
-        self.prob_uv = quantization_table_uv.div(100.0)
+        self.prob_y = qt_y.sub(qt_y.min()).div(qt_y.max() - qt_y.min() + 1.0)
+        self.prob_uv = qt_uv.sub(qt_uv.min()).div(qt_uv.max() - qt_uv.min() + 1.0)
         super().__init__()
     
     def _create_compression_kernel(self):
