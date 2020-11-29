@@ -110,20 +110,19 @@ class GaussianBlur(Distortioner):
         return kornia.filters.gaussian_blur2d(i_en, (self.w, self.w), (self.s, self.s))
 
 
-class JPEGCompression(Distortioner):
+class JPEGBase(Distortioner):
     def __init__(self):
         self.dct_kernel = self._create_dct_basis_matrix()
         self.idct_kernel = self._create_idct_basis_matrix()
-        self.compression_kernel = self._create_compression_kernel()
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = i_en.shape
         if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
-        x = kornia.color.rgb_to_yuv(i_en)
+        x = kornia.color.rgb_to_yuv(i_en) * 255
         x = self._apply_dct(x)
-        x = self._compress(x, self.compression_kernel)
+        x = self.compress(x)
         x = self._apply_idct(x)
-        x = kornia.color.yuv_to_rgb(x)
+        x = kornia.color.yuv_to_rgb(x) / 255
         return x
 
     def _apply_dct(self, x: torch.FloatTensor) -> torch.FloatTensor:
@@ -156,12 +155,6 @@ class JPEGCompression(Distortioner):
         y = torch.stack(ys, dim=0)
         return torch.sum(y, 0)
 
-    def _compress(self, x, k: torch.FloatTensor) -> torch.FloatTensor:
-        _, _, h, w = x.shape
-        _, kh, kw = k.shape
-        if not (kh == 8 and kw == 8): raise TypeError("k shape is not 8x8")
-        return x * k.repeat(1, h//8, w//8)
-
     def _create_dct_basis_matrix(self, n=8) -> torch.FloatTensor:
         mat = torch.zeros((n, n))
         for j in range(n):
@@ -178,53 +171,91 @@ class JPEGCompression(Distortioner):
     def _expand(self, x: torch.FloatTensor) -> torch.FloatTensor:
         return x[None, None, ...].expand(3, 1, -1, -1)
 
-    def _create_compression_kernel(self) -> torch.FloatTensor:
-        raise NotImplementedError()
+    def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        raise NotImplementedError
 
 
-class JPEGMask(JPEGCompression):
+class JPEGCompression(JPEGBase):
+    def __init__(self, qf=50):
+        super().__init__()
+        self.qf = qf
+        self.qt = self._create_quantization_table()
+
+    def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        _, _, h, w = x.shape
+        qt = self.qt.repeat(1, h//8, w//8)
+        return torch.round(x.div(qt)) * qt
+
+    def _create_quantization_table(self) -> torch.FloatTensor:
+        base_qt_y = torch.tensor(quantization_table_y, dtype=torch.float32).view(8, 8)
+        base_qt_uv = torch.tensor(quantization_table_uv, dtype=torch.float32).view(8, 8)
+        qt_y = self._adjust_quantization_quality(base_qt_y)
+        qt_uv = self._adjust_quantization_quality(base_qt_uv)
+        return torch.stack([qt_y, qt_uv, qt_uv], dim=0)
+        
+    def _adjust_quantization_quality(self, base: torch.FloatTensor) -> torch.FloatTensor:
+        s = 5000 / self.qf if self.qf < 50 else 200 - 2*self.qf
+        qt = torch.floor((s * base + 50) / 100)
+        return torch.where(qt == 0, torch.ones_like(qt), qt)
+
+
+class JPEGMask(JPEGBase):
     def __init__(self):
         super().__init__()
+        self.kernel = self._create_mask_kernel()
     
-    def _create_compression_kernel(self):
+    def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        _, _, h, w = x.shape
+        return x * self.kernel.repeat(1, h//8, w//8)
+
+    def _create_mask_kernel(self):
         kernel = torch.zeros(3, 8, 8)
         kernel[0, :5, :5] = 1 # y
         kernel[1:, :3, :3] = 1 # u, v
         return kernel
 
 
-class JPEGDrop(JPEGCompression):
+class JPEGDrop(JPEGBase):
     def __init__(self):
-        # quantization tables
-        qt_y = torch.tensor([
-            16, 11, 10, 16, 24,  40,  51,  61,
-            12, 12, 14, 19, 26,  58,  60,  55,
-            14, 13, 16, 24, 40,  57,  69,  56,
-            14, 17, 22, 29, 51,  87,  80,  62,
-            18, 22, 37, 56, 68,  109, 103, 77,
-            24, 36, 55, 64, 81,  104, 113, 92,
-            49, 64, 78, 87, 103, 121, 120, 101,
-            72, 92, 95, 98, 112, 100, 103, 99,
-        ], dtype=torch.float64).view(8, 8)
-        qt_uv = torch.tensor([
-            17, 18, 24, 47, 99, 99, 99, 99,
-            18, 21, 26, 66, 99, 99, 99, 99,
-            24, 26, 56, 99, 99, 99, 99, 99,
-            47, 66, 99, 99, 99, 99, 99, 99,
-            99, 99, 99, 99, 99, 99, 99, 99,
-            99, 99, 99, 99, 99, 99, 99, 99,
-            99, 99, 99, 99, 99, 99, 99, 99,
-            99, 99, 99, 99, 99, 99, 99, 99,
-        ], dtype=torch.float64).view(8, 8)
-        self.prob_y = qt_y.sub(qt_y.min()).div(qt_y.max() - qt_y.min() + 1.0)
-        self.prob_uv = qt_uv.sub(qt_uv.min()).div(qt_uv.max() - qt_uv.min() + 1.0)
         super().__init__()
+        self.kernel = self._create_drop_kernel()
     
-    def _create_compression_kernel(self):
+    def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        _, _, h, w = x.shape
+        return x * self.kernel.repeat(1, h//8, w//8)
+
+    def _create_drop_kernel(self):
+        qt_y = torch.tensor(quantization_table_y, dtype=torch.float64).view(8, 8)
+        qt_uv = torch.tensor(quantization_table_uv, dtype=torch.float64).view(8, 8)
+        prob_y = qt_y.sub(qt_y.min()).div(qt_y.max() - qt_y.min() + 1.0)
+        prob_uv = qt_uv.sub(qt_uv.min()).div(qt_uv.max() - qt_uv.min() + 1.0)
+
         one = torch.ones(8, 8)
         zero = torch.zeros(8, 8)
-        kernel_y = torch.where(torch.rand(8, 8) > self.prob_y, one, zero)
-        kernel_u = torch.where(torch.rand(8, 8) > self.prob_uv, one, zero)
-        kernel_v = torch.where(torch.rand(8, 8) > self.prob_uv, one, zero)
+        kernel_y = torch.where(torch.rand(8, 8) > prob_y, one, zero)
+        kernel_u = torch.where(torch.rand(8, 8) > prob_uv, one, zero)
+        kernel_v = torch.where(torch.rand(8, 8) > prob_uv, one, zero)
+
         return torch.stack([kernel_y, kernel_u, kernel_v])
 
+
+quantization_table_y = [
+    16, 11, 10, 16, 24,  40,  51,  61,
+    12, 12, 14, 19, 26,  58,  60,  55,
+    14, 13, 16, 24, 40,  57,  69,  56,
+    14, 17, 22, 29, 51,  87,  80,  62,
+    18, 22, 37, 56, 68,  109, 103, 77,
+    24, 36, 55, 64, 81,  104, 113, 92,
+    49, 64, 78, 87, 103, 121, 120, 101,
+    72, 92, 95, 98, 112, 100, 103, 99,
+]
+quantization_table_uv = [
+    17, 18, 24, 47, 99, 99, 99, 99,
+    18, 21, 26, 66, 99, 99, 99, 99,
+    24, 26, 56, 99, 99, 99, 99, 99,
+    47, 66, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+]
