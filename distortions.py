@@ -1,13 +1,15 @@
-# # Watermark Distortions
-# 
-# ## List of Distortions
-# - Identity
-# - Dropout
-# - Cropout
-# - Crop
-# - Resize
-# - Gaussian Blur
-# - JPEG Compression
+"""
+# Watermark Distortions
+
+## List of Distortions
+- Identity
+- Dropout
+- Cropout
+- Crop
+- Resize
+- Gaussian Blur
+- JPEG Compression
+"""
 
 import abc
 import math
