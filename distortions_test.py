@@ -24,7 +24,7 @@ import distortions
 
 
 def main():
-    inp = get_image_tensor("../images/dog_03.jpg")
+    inp = get_image_tensor("./images/input.jpg")
 
     torch.set_printoptions(precision=4, sci_mode=False)
 
@@ -45,8 +45,8 @@ def main():
         out = dis(inp, inp)
         outs.append(padding_image(out, inp.shape))
 
-    imsave(torch.cat(outs, dim=0), "../images/distortions.jpg", nrow=4, pad=2)
-    imshow(F.to_tensor(PIL.Image.open("../images/distortions.jpg")))
+    imsave(torch.cat(outs, dim=0), "./images/distortions.jpg", nrow=4, pad=2)
+    imshow(F.to_tensor(PIL.Image.open("./images/distortions.jpg")))
 
 
 def imshow(x: torch.FloatTensor):
@@ -67,7 +67,7 @@ def adjust_image_size(img :PIL.Image.Image) -> PIL.Image.Image:
 
 def get_image_tensor(path: str) -> torch.FloatTensor:
     img = PIL.Image.open(path)
-    img = adjust_image_size(img)kk
+    img = adjust_image_size(img)
     return F.to_tensor(img)[None, ...]
 
 
