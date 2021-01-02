@@ -1,4 +1,4 @@
-import setuptools import setup, find_packages
+from setuptools import setup, find_packages
 
 version = "0.0.1"
 package_name = "distortion"
