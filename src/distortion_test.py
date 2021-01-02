@@ -6,7 +6,7 @@ import torch
 import torchvision
 import torchvision.transforms.functional as F
 
-import src.distortion as distortion
+import distortion
 
 
 def main():
