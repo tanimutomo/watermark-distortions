@@ -24,9 +24,9 @@ if __name__ == "__main__":
         tests_require=['pytest'],
 
         # Package info
-        packages=find_packages(exclude=('images', 'src/distortion_test.py')),
+        packages=find_packages(exclude=("images", "*_test.py")),
         package_data={
-            "distortion": ["src/distortion.py"]
+            "distortion": ["src/*"]
         },
 
         install_requires=requirements,
