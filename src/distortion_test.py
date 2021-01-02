@@ -6,7 +6,7 @@ import torch
 import torchvision
 import torchvision.transforms.functional as F
 
-import distortions
+import src.distortion as distortion
 
 
 def main():
@@ -15,15 +15,15 @@ def main():
     torch.set_printoptions(precision=4, sci_mode=False)
 
     distortioners = {
-        "identity": distortions.Identity(),
-        "dropout": distortions.Dropout(0.5),
-        "cropout": distortions.Cropout(0.5),
-        "crop": distortions.Crop(0.5),
-        "resize": distortions.Resize(0.5),
-        "gaussian_blur": distortions.GaussianBlur(5, 2),
-        "jpeg_compression": distortions.JPEGCompression(),
-        "jpeg_mask": distortions.JPEGMask(),
-        "jpeg_drop": distortions.JPEGDrop()
+        "identity": distortion.Identity(),
+        "dropout": distortion.Dropout(0.5),
+        "cropout": distortion.Cropout(0.5),
+        "crop": distortion.Crop(0.5),
+        "resize": distortion.Resize(0.5),
+        "gaussian_blur": distortion.GaussianBlur(5, 2),
+        "jpeg_compression": distortion.JPEGCompression(),
+        "jpeg_mask": distortion.JPEGMask(),
+        "jpeg_drop": distortion.JPEGDrop()
     }
 
     outs = []
@@ -32,8 +32,8 @@ def main():
         out = dis(inp, inp)
         outs.append(padding_image(out, inp.shape))
 
-    imsave(torch.cat(outs, dim=0), "./images/distortions.jpg", nrow=3, pad=2)
-    imshow(F.to_tensor(PIL.Image.open("./images/distortions.jpg")))
+    imsave(torch.cat(outs, dim=0), "./images/distortion.jpg", nrow=3, pad=2)
+    imshow(F.to_tensor(PIL.Image.open("./images/distortion.jpg")))
 
 
 def imshow(x: torch.FloatTensor):
