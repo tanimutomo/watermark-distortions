@@ -27,7 +27,7 @@ if __name__ == "__main__":
         packages=find_packages(exclude=('images', 'src/distortion_test.py')),
         package_data={
             "distortion": ["src/distortion.py"]
-        }
+        },
 
         install_requires=requirements,
     )
