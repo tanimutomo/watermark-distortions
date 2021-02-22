@@ -39,6 +39,7 @@ class Dropout(Distortioner):
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         mask = self._create_mask(i_co.shape)
+        mask = mask.to(i_co.device)
         return i_en * mask + i_co * (1 - mask)
     
     def _create_mask(self, shape: tuple) -> torch.FloatTensor:
@@ -53,6 +54,7 @@ class Cropout(Distortioner):
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         mask = self._create_mask(i_co.shape)
+        mask = mask.to(i_co.device)
         return i_en * mask + i_co * (1 - mask)
     
     def _create_mask(self, shape: tuple) -> torch.FloatTensor:
