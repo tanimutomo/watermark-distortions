@@ -80,19 +80,24 @@ class Crop(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        h, w, hc, wc = self._sample_params(i_en.shape)
-        return i_en[..., hc-h//2 : hc+h//2, wc-w//2 : wc+w//2]
+        h, w, cx, cy = self._sample_params(i_en.shape)
+        return i_en[..., cx-h//2 : cx+h//2, cy-w//2 : cy+w//2]
     
     def _sample_params(self, shape: tuple) -> typing.Tuple[int, int, int, int]:
         _, _, h, w = shape
-        ch, cw = int(h*self.p), int(w*self.p)
+        crop_area = h * w * self.p
+        mu = math.pow(crop_area, 0.5)
+        sigma = mu / 4
+        ch = round(random.gauss(mu, sigma))
+        cw = round(crop_area / ch)
+        print(mu, sigma)
+        print(ch, cw)
+        print(h, w)
 
-        h_center_range = (ch//2 + 1, h - (ch//2 + 1))
-        w_center_range = (cw//2 + 1, w - (cw//2 + 1))
-        h_center = random.randint(*h_center_range)
-        w_center = random.randint(*w_center_range)
+        center_range = ((ch//2 + 1, h - (ch//2 + 1)), (cw//2 + 1, w - (cw//2 + 1)))
+        center = (random.randint(*center_range[0]), random.randint(*center_range[1]))
 
-        return ch, cw, h_center, w_center
+        return ch, cw, center[0], center[1]
 
 
 class Resize(Distortioner):
