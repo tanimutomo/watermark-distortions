@@ -90,9 +90,6 @@ class Crop(Distortioner):
         sigma = mu / 4
         ch = round(random.gauss(mu, sigma))
         cw = round(crop_area / ch)
-        print(mu, sigma)
-        print(ch, cw)
-        print(h, w)
 
         center_range = ((ch//2 + 1, h - (ch//2 + 1)), (cw//2 + 1, w - (cw//2 + 1)))
         center = (random.randint(*center_range[0]), random.randint(*center_range[1]))
