@@ -80,15 +80,16 @@ class Crop(Distortioner):
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
-        h, w, cx, cy = self._sample_params(i_en.shape)
-        return i_en[..., cx-h//2 : cx+h//2, cy-w//2 : cy+w//2]
+        h, w, cy, cx = self._sample_params(i_en.shape)
+        return i_en[..., cy-h//2 : cy+h//2, cx-w//2 : cx+w//2]
     
     def _sample_params(self, shape: tuple) -> typing.Tuple[int, int, int, int]:
         _, _, h, w = shape
         crop_area = h * w * self.p
         mu = math.pow(crop_area, 0.5)
         sigma = mu / 4
-        ch = round(random.gauss(mu, sigma))
+        ch_ = round(random.gauss(mu, sigma))
+        ch = max(min(ch_, h-2),  math.ceil(crop_area / h)+2)
         cw = round(crop_area / ch)
 
         center_range = ((ch//2 + 1, h - (ch//2 + 1)), (cw//2 + 1, w - (cw//2 + 1)))
