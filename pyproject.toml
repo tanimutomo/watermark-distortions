@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "distortion"
-version = "0.1.1"
+version = "0.1.2"
 description = "Watermark distortions"
 license = "Apache-2.0"
 authors = ["tanimutomo <tanimutomo@gmail.com>"]
@@ -12,8 +12,8 @@ exclude = [".gitignore", "images", ]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-torch = "1.6.0"
-kornia = "0.4.0"
+torch = "^1.6.0"
+kornia = "^0.4.0"
 
 [tool.poetry.dev-dependencies]
 
