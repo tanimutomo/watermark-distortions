@@ -1,8 +1,14 @@
 [tool.poetry]
 name = "distortion"
-version = "0.1.0"
-description = ""
+version = "0.1.1"
+description = "Watermark distortions"
+license = "Apache-2.0"
 authors = ["tanimutomo <tanimutomo@gmail.com>"]
+repository = "https://github.com/tanimutomo/watermark-distortions"
+packages = [
+  { include = "distortion/*.py" }
+]
+exclude = [".gitignore", "images", ]
 
 [tool.poetry.dependencies]
 python = "^3.8"
