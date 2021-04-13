@@ -179,7 +179,7 @@ class JPEGBase(Distortioner):
     def _expand(self, x: torch.FloatTensor) -> torch.FloatTensor:
         return x[None, None, ...].expand(3, 1, -1, -1)
 
-    def _kernel_to_deivce(self, device: torch.device):
+    def _kernel_to_device(self, device: torch.device):
         self.dct_kernel.to(device)
         self.idct_kernel.to(device)
 
