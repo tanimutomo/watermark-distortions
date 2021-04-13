@@ -129,7 +129,6 @@ class JPEGBase(Distortioner):
         super().__init__()
         self.dct_kernel = torch.nn.Parameter(self._create_dct_basis_matrix(), requires_grad=False)
         self.idct_kernel = torch.nn.Parameter(self._create_idct_basis_matrix(), requires_grad=False)
-        self.conv_kernel = torch.nn.Parameter(torch.empty(15, 15), requires_grad=False)
 
     def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = i_en.shape
@@ -150,18 +149,14 @@ class JPEGBase(Distortioner):
     def _convdot(self, x, k: torch.FloatTensor, dot_x_k: bool) -> torch.FloatTensor:
         ys = []
         for i in range(8):
-            basis = k[:, i] if dot_x_k else k[i, :]
-            pos = (7, slice(7-i, 15-i)) if dot_x_k else (slice(7-i, 15-i), 7)
-            self.conv_kernel.fill_(0)
-            self.conv_kernel[pos[0], pos[1]] = basis
-
             stride = (1, 8) if dot_x_k else (8, 1)
             pad = (7-i, i, 7, 7) if dot_x_k else (7, 7, 7-i, i)
-            y = F.conv2d(F.pad(x, pad), self._expand(self.conv_kernel), stride=stride, groups=3)
 
-            self.conv_kernel.fill_(0)
-            self.conv_kernel[7, 7] = 1
-            y = F.conv_transpose2d(y, self._expand(self.conv_kernel), stride=stride, padding=(7, 7), groups=3)
+            kernel = self._get_conv_kernel_1(k, i, dot_x_k, x.device)
+            y = F.conv2d(F.pad(x, pad), kernel, stride=stride, groups=3)
+
+            kernel = self._get_conv_kernel_2(x.device)
+            y = F.conv_transpose2d(y, kernel, stride=stride, padding=(7, 7), groups=3)
 
             pad = (i, 7-i, 0, 0) if dot_x_k else (0, 0, i, 7-i)
             y = F.pad(y, pad)
@@ -183,6 +178,18 @@ class JPEGBase(Distortioner):
 
     def _create_idct_basis_matrix(self) -> torch.FloatTensor:
         return self._create_dct_basis_matrix(8).transpose(1, 0)
+
+    def _get_conv_kernel_1(self, k: torch.Tensor, i: int, dot_x_k: bool, device: torch.device) -> torch.Tensor:
+        basis = k[:, i] if dot_x_k else k[i, :]
+        pos = (7, slice(7-i, 15-i)) if dot_x_k else (slice(7-i, 15-i), 7)
+        kernel = torch.zeros(15, 15, device=device)
+        kernel[pos[0], pos[1]] = basis
+        return self._expand(kernel)
+
+    def _get_conv_kernel_2(self, device: torch.device) -> torch.Tensor:
+        kernel = torch.zeros(15, 15, device=device)
+        kernel[7, 7] = 1
+        return self._expand(kernel)
 
     def _expand(self, x: torch.FloatTensor) -> torch.FloatTensor:
         return x[None, None, ...].expand(3, 1, -1, -1)
