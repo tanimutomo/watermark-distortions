@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "distortion"
-version = "0.1.11"
+version = "0.1.14"
 description = "Watermark distortions"
 license = "Apache-2.0"
 authors = ["tanimutomo <tanimutomo@gmail.com>"]
