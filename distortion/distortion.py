@@ -21,22 +21,25 @@ import torch
 import torch.nn.functional as F
 
 
-class Distortioner(object, metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         raise NotImplementedError()
 
 
 class Identity(Distortioner):
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         return i_en
 
 
 class Dropout(Distortioner):
     def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         mask = self._create_mask(i_co.shape)
         mask = mask.to(i_co.device)
@@ -49,9 +52,10 @@ class Dropout(Distortioner):
 
 class Cropout(Distortioner):
     def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         mask = self._create_mask(i_co.shape)
         mask = mask.to(i_co.device)
@@ -76,9 +80,10 @@ class Cropout(Distortioner):
 
 class Crop(Distortioner):
     def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         h, w, cy, cx = self._sample_params(i_en.shape)
         return i_en[..., cy-h//2 : cy+h//2, cx-w//2 : cx+w//2]
@@ -100,30 +105,33 @@ class Crop(Distortioner):
 
 class Resize(Distortioner):
     def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         return F.interpolate(i_en, scale_factor=self.p, recompute_scale_factor=True)
 
 
 class GaussianBlur(Distortioner):
     def __init__(self, w, s: int):
+        super().__init__()
         self.w = w
         self.s = s
     
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.s == 0: return i_en
         return kornia.filters.gaussian_blur2d(i_en, (self.w, self.w), (self.s, self.s))
 
 
 class JPEGBase(Distortioner):
     def __init__(self):
-        self.dct_kernel = self._create_dct_basis_matrix()
-        self.idct_kernel = self._create_idct_basis_matrix()
+        super().__init__()
+        self.dct_kernel = torch.nn.Parameter(self._create_dct_basis_matrix(), requires_grad=False)
+        self.idct_kernel = torch.nn.Parameter(self._create_idct_basis_matrix(), requires_grad=False)
+        self.conv_kernel = torch.nn.Parameter(torch.empty(15, 15), requires_grad=False)
 
-    def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
-        self._kernel_to_device(i_co.device)
+    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = i_en.shape
         if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
         x = kornia.color.rgb_to_yuv(i_en) * 255
@@ -143,17 +151,17 @@ class JPEGBase(Distortioner):
         ys = []
         for i in range(8):
             basis = k[:, i] if dot_x_k else k[i, :]
-            kernel = torch.zeros(15, 15)
             pos = (7, slice(7-i, 15-i)) if dot_x_k else (slice(7-i, 15-i), 7)
-            kernel[pos[0], pos[1]] = basis
+            self.conv_kernel.fill_(0)
+            self.conv_kernel[pos[0], pos[1]] = basis
 
             stride = (1, 8) if dot_x_k else (8, 1)
             pad = (7-i, i, 7, 7) if dot_x_k else (7, 7, 7-i, i)
-            y = F.conv2d(F.pad(x, pad), self._expand(kernel.to(x.device)), stride=stride, groups=3)
+            y = F.conv2d(F.pad(x, pad), self._expand(self.conv_kernel), stride=stride, groups=3)
 
-            kernel = torch.zeros(15, 15)
-            kernel[7, 7] = 1
-            y = F.conv_transpose2d(y, self._expand(kernel.to(x.device)), stride=stride, padding=(7, 7), groups=3)
+            self.conv_kernel.fill_(0)
+            self.conv_kernel[7, 7] = 1
+            y = F.conv_transpose2d(y, self._expand(self.conv_kernel), stride=stride, padding=(7, 7), groups=3)
 
             pad = (i, 7-i, 0, 0) if dot_x_k else (0, 0, i, 7-i)
             y = F.pad(y, pad)
@@ -179,11 +187,6 @@ class JPEGBase(Distortioner):
     def _expand(self, x: torch.FloatTensor) -> torch.FloatTensor:
         return x[None, None, ...].expand(3, 1, -1, -1)
 
-    def _kernel_to_device(self, device: torch.device):
-        self.dct_kernel.to(device)
-        self.idct_kernel.to(device)
-        self.kernel.to(device)
-
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         raise NotImplementedError
 
@@ -192,7 +195,7 @@ class JPEGCompression(JPEGBase):
     def __init__(self, qf=50):
         super().__init__()
         self.qf = qf
-        self.kernel = self._create_quantization_table()
+        self.kernel = torch.nn.Parameter(self._create_quantization_table(), requireds_grad=False)
 
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
@@ -215,7 +218,7 @@ class JPEGCompression(JPEGBase):
 class JPEGMask(JPEGBase):
     def __init__(self):
         super().__init__()
-        self.kernel = self._create_mask_kernel()
+        self.kernel = torch.nn.Parameter(self._create_mask_kernel())
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
@@ -231,7 +234,7 @@ class JPEGMask(JPEGBase):
 class JPEGDrop(JPEGBase):
     def __init__(self):
         super().__init__()
-        self.kernel = self._create_drop_kernel()
+        self.kernel = torch.nn.Parameter(self._create_drop_kernel())
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
