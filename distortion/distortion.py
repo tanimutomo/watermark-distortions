@@ -123,6 +123,7 @@ class JPEGBase(Distortioner):
         self.idct_kernel = self._create_idct_basis_matrix()
 
     def __call__(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+        self._kernel_to_device(i_co.device)
         _, _, h, w = i_en.shape
         if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
         x = kornia.color.rgb_to_yuv(i_en) * 255
@@ -148,11 +149,11 @@ class JPEGBase(Distortioner):
 
             stride = (1, 8) if dot_x_k else (8, 1)
             pad = (7-i, i, 7, 7) if dot_x_k else (7, 7, 7-i, i)
-            y = F.conv2d(F.pad(x, pad), self._expand(kernel), stride=stride, groups=3)
+            y = F.conv2d(F.pad(x, pad), self._expand(kernel.to(x.device)), stride=stride, groups=3)
 
             kernel = torch.zeros(15, 15)
             kernel[7, 7] = 1
-            y = F.conv_transpose2d(y, self._expand(kernel), stride=stride, padding=(7, 7), groups=3)
+            y = F.conv_transpose2d(y, self._expand(kernel.to(x.device)), stride=stride, padding=(7, 7), groups=3)
 
             pad = (i, 7-i, 0, 0) if dot_x_k else (0, 0, i, 7-i)
             y = F.pad(y, pad)
@@ -177,6 +178,10 @@ class JPEGBase(Distortioner):
 
     def _expand(self, x: torch.FloatTensor) -> torch.FloatTensor:
         return x[None, None, ...].expand(3, 1, -1, -1)
+
+    def _kernel_to_deivce(self, device: torch.device):
+        self.dct_kernel.to(device)
+        self.idct_kernel.to(device)
 
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         raise NotImplementedError
