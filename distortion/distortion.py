@@ -182,6 +182,7 @@ class JPEGBase(Distortioner):
     def _kernel_to_device(self, device: torch.device):
         self.dct_kernel.to(device)
         self.idct_kernel.to(device)
+        self.kernel.to(device)
 
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         raise NotImplementedError
@@ -191,11 +192,11 @@ class JPEGCompression(JPEGBase):
     def __init__(self, qf=50):
         super().__init__()
         self.qf = qf
-        self.qt = self._create_quantization_table()
+        self.kernel = self._create_quantization_table()
 
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
-        qt = self.qt.repeat(1, h//8, w//8)
+        qt = self.kernel.repeat(1, h//8, w//8)
         return torch.round(x.div(qt)) * qt
 
     def _create_quantization_table(self) -> torch.FloatTensor:
