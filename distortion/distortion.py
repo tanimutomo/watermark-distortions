@@ -202,7 +202,7 @@ class JPEGCompression(JPEGBase):
     def __init__(self, qf=50):
         super().__init__()
         self.qf = qf
-        self.kernel = torch.nn.Parameter(self._create_quantization_table(), requireds_grad=False)
+        self.kernel = torch.nn.Parameter(self._create_quantization_table(), requires_grad=False)
 
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
@@ -225,7 +225,7 @@ class JPEGCompression(JPEGBase):
 class JPEGMask(JPEGBase):
     def __init__(self):
         super().__init__()
-        self.kernel = torch.nn.Parameter(self._create_mask_kernel())
+        self.kernel = torch.nn.Parameter(self._create_mask_kernel(), requires_grad=False)
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
@@ -241,7 +241,7 @@ class JPEGMask(JPEGBase):
 class JPEGDrop(JPEGBase):
     def __init__(self):
         super().__init__()
-        self.kernel = torch.nn.Parameter(self._create_drop_kernel())
+        self.kernel = torch.nn.Parameter(self._create_drop_kernel(), requires_grad=False)
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
