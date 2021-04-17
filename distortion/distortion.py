@@ -225,8 +225,8 @@ class JPEGCompression(JPEGBase):
 class JPEGDifferential(JPEGBase):
     def __init__(self, mean: typing.List[float], std: typing.List[float]):
         super().__init__()
-        self.mean = torch.tensor(mean)[None, :, None, None]
-        self.std = torch.tensor(std)[None, :, None, None]
+        self.mean = torch.nn.Parameter(torch.tensor(mean)[None, :, None, None], requires_grad=False)
+        self.std =  torch.nn.Parameter(torch.tensor(std)[None, :, None, None], requires_grad=False)
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
