@@ -222,15 +222,28 @@ class JPEGCompression(JPEGBase):
         return torch.where(qt == 0, torch.ones_like(qt), qt)
 
 
-class JPEGMask(JPEGBase):
-    def __init__(self):
+class JPEGDifferential(JPEGBase):
+    def __init__(self, mean: typing.List[float], std: typing.List[float]):
         super().__init__()
-        self.kernel = torch.nn.Parameter(self._create_mask_kernel(), requires_grad=False)
+        self.mean = torch.tensor(mean)[None, :, None, None]
+        self.std = torch.tensor(std)[None, :, None, None]
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
-        return x * self.kernel.repeat(1, h//8, w//8)
+        return self._normalize(self._unnormalize(x) * self.kernel.repeat(1, h//8, w//8))
 
+    def _normalize(self, x: torch.Tensor) -> torch.Tensor:
+        return (x - self.mean) / self.std
+
+    def _unnormalize(self, x: torch.Tensor) -> torch.Tensor:
+        return x * self.std + self.mean
+
+
+class JPEGMask(JPEGDifferential):
+    def __init__(self, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
+        self.kernel = torch.nn.Parameter(self._create_mask_kernel(), requires_grad=False)
+    
     def _create_mask_kernel(self):
         kernel = torch.zeros(3, 8, 8)
         kernel[0, :5, :5] = 1 # y
@@ -238,15 +251,11 @@ class JPEGMask(JPEGBase):
         return kernel
 
 
-class JPEGDrop(JPEGBase):
-    def __init__(self):
-        super().__init__()
+class JPEGDrop(JPEGDifferential):
+    def __init__(self, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.kernel = torch.nn.Parameter(self._create_drop_kernel(), requires_grad=False)
     
-    def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        _, _, h, w = x.shape
-        return x * self.kernel.repeat(1, h//8, w//8)
-
     def _create_drop_kernel(self):
         qt_y = torch.tensor(quantization_table_y, dtype=torch.float64).view(8, 8)
         qt_uv = torch.tensor(quantization_table_uv, dtype=torch.float64).view(8, 8)

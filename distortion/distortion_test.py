@@ -22,8 +22,8 @@ def main():
         "resize": distortion.Resize(0.5),
         "gaussian_blur": distortion.GaussianBlur(5, 2),
         "jpeg_compression": distortion.JPEGCompression(),
-        "jpeg_mask": distortion.JPEGMask(),
-        "jpeg_drop": distortion.JPEGDrop()
+        "jpeg_mask": distortion.JPEGMask([0, 0, 0], [1, 1, 1]),
+        "jpeg_drop": distortion.JPEGDrop([0, 0, 0], [1, 1, 1])
     }
 
     outs = []
