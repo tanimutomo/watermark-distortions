@@ -1,4 +1,5 @@
 from distortion.distortion import (
+    init,
     Distortioner,
     Identity,
     Dropout,

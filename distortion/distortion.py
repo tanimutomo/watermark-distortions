@@ -21,11 +21,21 @@ import torch
 import torch.nn.functional as F
 
 
+MEAN: typing.List[float] = [0.0, 0.0, 0.0]
+STD:  typing.List[float] = [1.0, 1.0, 1.0]
+
+
+def init(mean: typing.List[float], std: typing.List[float]):
+    global MEAN, STD
+    MEAN = mean
+    STD = std
+
+
 class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
-    def __init__(self, mean: typing.List[float], std: typing.List[float]):
+    def __init__(self):
         super().__init__()
-        self.mean = torch.nn.Parameter(torch.tensor(mean)[None, :, None, None], requires_grad=False)
-        self.std =  torch.nn.Parameter(torch.tensor(std)[None, :, None, None], requires_grad=False)
+        self.mean = torch.nn.Parameter(torch.tensor(MEAN)[None, :, None, None], requires_grad=False)
+        self.std =  torch.nn.Parameter(torch.tensor(STD)[None, :, None, None], requires_grad=False)
 
     def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         return self._normalize(self.distort(self._unnormalize(i_co), self._unnormalize(i_en)))
@@ -38,16 +48,16 @@ class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
 
 
 class Identity(Distortioner):
-    def __init__(self, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self):
+        super().__init__()
 
     def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         return i_en
 
 
 class Dropout(Distortioner):
-    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
     def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
@@ -62,8 +72,8 @@ class Dropout(Distortioner):
 
 
 class Cropout(Distortioner):
-    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
     def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
@@ -90,8 +100,8 @@ class Cropout(Distortioner):
 
 
 class Crop(Distortioner):
-    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
     def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
@@ -115,8 +125,8 @@ class Crop(Distortioner):
 
 
 class Resize(Distortioner):
-    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self, p: float):
+        super().__init__()
         self.p = p
 
     def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
@@ -125,8 +135,8 @@ class Resize(Distortioner):
 
 
 class GaussianBlur(Distortioner):
-    def __init__(self, w: int, s: float, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self, w: int, s: float):
+        super().__init__()
         self.w = w
         self.s = s
     
@@ -136,8 +146,8 @@ class GaussianBlur(Distortioner):
 
 
 class JPEGBase(Distortioner):
-    def __init__(self, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self):
+        super().__init__()
         self.dct_kernel = torch.nn.Parameter(self._create_dct_basis_matrix(), requires_grad=False)
         self.idct_kernel = torch.nn.Parameter(self._create_idct_basis_matrix(), requires_grad=False)
 
@@ -210,8 +220,8 @@ class JPEGBase(Distortioner):
 
 
 class JPEGCompression(JPEGBase):
-    def __init__(self, qf: int, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self, qf: int):
+        super().__init__()
         self.qf = qf
         self.kernel = torch.nn.Parameter(self._create_quantization_table(), requires_grad=False)
 
@@ -234,8 +244,8 @@ class JPEGCompression(JPEGBase):
 
 
 class JPEGDifferential(JPEGBase):
-    def __init__(self, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self):
+        super().__init__()
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
@@ -249,8 +259,8 @@ class JPEGDifferential(JPEGBase):
 
 
 class JPEGMask(JPEGDifferential):
-    def __init__(self, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self):
+        super().__init__()
         self.kernel = torch.nn.Parameter(self._create_mask_kernel(), requires_grad=False)
     
     def _create_mask_kernel(self):
@@ -261,8 +271,8 @@ class JPEGMask(JPEGDifferential):
 
 
 class JPEGDrop(JPEGDifferential):
-    def __init__(self, mean: typing.List[float], std: typing.List[float]):
-        super().__init__(mean, std)
+    def __init__(self):
+        super().__init__()
         self.kernel = torch.nn.Parameter(self._create_drop_kernel(), requires_grad=False)
     
     def _create_drop_kernel(self):

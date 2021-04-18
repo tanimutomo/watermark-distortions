@@ -22,16 +22,17 @@ def main():
 
     torch.set_printoptions(precision=4, sci_mode=False)
 
+    distortion.init(MEAN, STD)
     distortioners = {
-        "identity": distortion.Identity(MEAN, STD),
-        "dropout": distortion.Dropout(0.5, MEAN, STD),
-        "cropout": distortion.Cropout(0.5, MEAN, STD),
-        "crop": distortion.Crop(0.5, MEAN, STD),
-        "resize": distortion.Resize(0.5, MEAN, STD),
-        "gaussian_blur": distortion.GaussianBlur(5, 2, MEAN, STD),
-        "jpeg_compression": distortion.JPEGCompression(50, MEAN, STD),
-        "jpeg_mask": distortion.JPEGMask(MEAN, STD),
-        "jpeg_drop": distortion.JPEGDrop(MEAN, STD)
+        "identity": distortion.Identity(),
+        "dropout": distortion.Dropout(0.5),
+        "cropout": distortion.Cropout(0.5),
+        "crop": distortion.Crop(0.5),
+        "resize": distortion.Resize(0.5),
+        "gaussian_blur": distortion.GaussianBlur(5, 2),
+        "jpeg_compression": distortion.JPEGCompression(50),
+        "jpeg_mask": distortion.JPEGMask(),
+        "jpeg_drop": distortion.JPEGDrop()
     }
 
     outs = []
