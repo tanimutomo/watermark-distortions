@@ -2,6 +2,7 @@ import typing
 
 import matplotlib.pyplot as plt
 import PIL
+import ptdt
 import torch
 import torchvision
 import torchvision.transforms.functional as F
@@ -9,28 +10,35 @@ import torchvision.transforms.functional as F
 import distortion
 
 
+MEAN = [0.5, 0.5, 0.5]
+STD = [0.5, 0.436, 0.615]
+MEAN_TENSOR = torch.tensor(MEAN)[None, :, None, None]
+STD_TENSOR = torch.tensor(STD)[None, :, None, None]
+
+
 def main():
     inp = get_image_tensor("./images/input.jpg")
+    inp = normalize(inp)
 
     torch.set_printoptions(precision=4, sci_mode=False)
 
     distortioners = {
-        "identity": distortion.Identity(),
-        "dropout": distortion.Dropout(0.5),
-        "cropout": distortion.Cropout(0.5),
-        "crop": distortion.Crop(0.5),
-        "resize": distortion.Resize(0.5),
-        "gaussian_blur": distortion.GaussianBlur(5, 2),
-        "jpeg_compression": distortion.JPEGCompression(),
-        "jpeg_mask": distortion.JPEGMask([0, 0, 0], [1, 1, 1]),
-        "jpeg_drop": distortion.JPEGDrop([0, 0, 0], [1, 1, 1])
+        "identity": distortion.Identity(MEAN, STD),
+        "dropout": distortion.Dropout(0.5, MEAN, STD),
+        "cropout": distortion.Cropout(0.5, MEAN, STD),
+        "crop": distortion.Crop(0.5, MEAN, STD),
+        "resize": distortion.Resize(0.5, MEAN, STD),
+        "gaussian_blur": distortion.GaussianBlur(5, 2, MEAN, STD),
+        "jpeg_compression": distortion.JPEGCompression(50, MEAN, STD),
+        "jpeg_mask": distortion.JPEGMask(MEAN, STD),
+        "jpeg_drop": distortion.JPEGDrop(MEAN, STD)
     }
 
     outs = []
     for name, dis in distortioners.items():
         print(name)
         out = dis(inp, inp)
-        outs.append(padding_image(out, inp.shape))
+        outs.append(padding_image(unnormalize(out), inp.shape))
 
     imsave(torch.cat(outs, dim=0), "./images/distortion.jpg", nrow=3, pad=2)
     imshow(F.to_tensor(PIL.Image.open("./images/distortion.jpg")))
@@ -51,6 +59,14 @@ def adjust_image_size(img :PIL.Image.Image) -> PIL.Image.Image:
     nh, nw = h - h % 8, w - w % 8
     return F.resize(img, (nh, nw))
 
+
+def normalize(x: torch.Tensor):
+    return (x - MEAN_TENSOR) / STD_TENSOR
+    
+
+def unnormalize(x: torch.Tensor):
+    return x * STD_TENSOR + MEAN_TENSOR
+    
 
 def get_image_tensor(path: str) -> torch.FloatTensor:
     img = PIL.Image.open(path)

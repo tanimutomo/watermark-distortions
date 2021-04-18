@@ -22,24 +22,35 @@ import torch.nn.functional as F
 
 
 class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
-    def __init__(self):
+    def __init__(self, mean: typing.List[float], std: typing.List[float]):
         super().__init__()
+        self.mean = torch.nn.Parameter(torch.tensor(mean)[None, :, None, None], requires_grad=False)
+        self.std =  torch.nn.Parameter(torch.tensor(std)[None, :, None, None], requires_grad=False)
 
     def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
-        raise NotImplementedError()
+        return self._normalize(self.distort(self._unnormalize(i_co), self._unnormalize(i_en)))
+
+    def _normalize(self, x: torch.Tensor) -> torch.Tensor:
+        return (x - self.mean) / self.std
+
+    def _unnormalize(self, x: torch.Tensor) -> torch.Tensor:
+        return x * self.std + self.mean
 
 
 class Identity(Distortioner):
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def __init__(self, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
+
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         return i_en
 
 
 class Dropout(Distortioner):
-    def __init__(self, p: float):
-        super().__init__()
+    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.p = p
 
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         mask = self._create_mask(i_co.shape)
         mask = mask.to(i_co.device)
@@ -51,11 +62,11 @@ class Dropout(Distortioner):
 
 
 class Cropout(Distortioner):
-    def __init__(self, p: float):
-        super().__init__()
+    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.p = p
 
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         mask = self._create_mask(i_co.shape)
         mask = mask.to(i_co.device)
@@ -79,11 +90,11 @@ class Cropout(Distortioner):
 
 
 class Crop(Distortioner):
-    def __init__(self, p: float):
-        super().__init__()
+    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.p = p
 
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         h, w, cy, cx = self._sample_params(i_en.shape)
         return i_en[..., cy-h//2 : cy+h//2, cx-w//2 : cx+w//2]
@@ -104,33 +115,33 @@ class Crop(Distortioner):
 
 
 class Resize(Distortioner):
-    def __init__(self, p: float):
-        super().__init__()
+    def __init__(self, p: float, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.p = p
 
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.p == 1: return i_en
         return F.interpolate(i_en, scale_factor=self.p, recompute_scale_factor=True)
 
 
 class GaussianBlur(Distortioner):
-    def __init__(self, w, s: int):
-        super().__init__()
+    def __init__(self, w: int, s: float, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.w = w
         self.s = s
     
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         if self.s == 0: return i_en
         return kornia.filters.gaussian_blur2d(i_en, (self.w, self.w), (self.s, self.s))
 
 
 class JPEGBase(Distortioner):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.dct_kernel = torch.nn.Parameter(self._create_dct_basis_matrix(), requires_grad=False)
         self.idct_kernel = torch.nn.Parameter(self._create_idct_basis_matrix(), requires_grad=False)
 
-    def forward(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = i_en.shape
         if not (h % 8 == 0 and w % 8 == 0): raise TypeError("x shape cannot be devided 8")
         x = kornia.color.rgb_to_yuv(i_en) * 255
@@ -199,8 +210,8 @@ class JPEGBase(Distortioner):
 
 
 class JPEGCompression(JPEGBase):
-    def __init__(self, qf=50):
-        super().__init__()
+    def __init__(self, qf: int, mean: typing.List[float], std: typing.List[float]):
+        super().__init__(mean, std)
         self.qf = qf
         self.kernel = torch.nn.Parameter(self._create_quantization_table(), requires_grad=False)
 
@@ -224,9 +235,7 @@ class JPEGCompression(JPEGBase):
 
 class JPEGDifferential(JPEGBase):
     def __init__(self, mean: typing.List[float], std: typing.List[float]):
-        super().__init__()
-        self.mean = torch.nn.Parameter(torch.tensor(mean)[None, :, None, None], requires_grad=False)
-        self.std =  torch.nn.Parameter(torch.tensor(std)[None, :, None, None], requires_grad=False)
+        super().__init__(mean, std)
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
