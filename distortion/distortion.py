@@ -265,7 +265,7 @@ class JPEGDrop(JPEGBase):
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
-        kernel = self._create_drop_kernel()
+        kernel = self._create_drop_kernel().to(x.device)
         return x * kernel.repeat(1, h//8, w//8)
 
     def _create_drop_kernel(self):
