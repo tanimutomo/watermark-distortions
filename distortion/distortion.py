@@ -249,13 +249,7 @@ class JPEGDifferential(JPEGBase):
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
-        return self._normalize(self._unnormalize(x) * self.kernel.repeat(1, h//8, w//8))
-
-    def _normalize(self, x: torch.Tensor) -> torch.Tensor:
-        return (x - self.mean) / self.std
-
-    def _unnormalize(self, x: torch.Tensor) -> torch.Tensor:
-        return x * self.std + self.mean
+        return x * self.kernel.repeat(1, h//8, w//8)
 
 
 class JPEGMask(JPEGDifferential):
@@ -283,7 +277,7 @@ class JPEGDrop(JPEGDifferential):
 
         one = torch.ones(8, 8)
         zero = torch.zeros(8, 8)
-        kernel_y = torch.where(torch.rand(8, 8) > prob_y, one, zero)
+        kernel_y = torch.where(torch.rand(8, 8) > prob_y,  one, zero)
         kernel_u = torch.where(torch.rand(8, 8) > prob_uv, one, zero)
         kernel_v = torch.where(torch.rand(8, 8) > prob_uv, one, zero)
 
