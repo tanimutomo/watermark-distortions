@@ -243,20 +243,15 @@ class JPEGCompression(JPEGBase):
         return torch.where(qt == 0, torch.ones_like(qt), qt)
 
 
-class JPEGDifferential(JPEGBase):
+class JPEGMask(JPEGBase):
     def __init__(self):
         super().__init__()
+        self.kernel = torch.nn.Parameter(self._create_mask_kernel(), requires_grad=False)
     
     def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
         _, _, h, w = x.shape
         return x * self.kernel.repeat(1, h//8, w//8)
 
-
-class JPEGMask(JPEGDifferential):
-    def __init__(self):
-        super().__init__()
-        self.kernel = torch.nn.Parameter(self._create_mask_kernel(), requires_grad=False)
-    
     def _create_mask_kernel(self):
         kernel = torch.zeros(3, 8, 8)
         kernel[0, :5, :5] = 1 # y
@@ -264,11 +259,15 @@ class JPEGMask(JPEGDifferential):
         return kernel
 
 
-class JPEGDrop(JPEGDifferential):
+class JPEGDrop(JPEGBase):
     def __init__(self):
         super().__init__()
-        self.kernel = torch.nn.Parameter(self._create_drop_kernel(), requires_grad=False)
     
+    def compress(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        _, _, h, w = x.shape
+        kernel = self._create_drop_kernel()
+        return x * kernel.repeat(1, h//8, w//8)
+
     def _create_drop_kernel(self):
         qt_y = torch.tensor(quantization_table_y, dtype=torch.float64).view(8, 8)
         qt_uv = torch.tensor(quantization_table_uv, dtype=torch.float64).view(8, 8)
