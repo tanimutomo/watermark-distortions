@@ -47,6 +47,24 @@ class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
         return x * self.std + self.mean
 
 
+class Combined(Distortioner):
+    def __init__(self, ps: typing.List[float], w: int, sigmas: typing.List[float]):
+        super().__init__()
+        self.distorioner = [
+            Identity(),
+            *[Dropout(p) for p in ps],
+            *[Cropout(p) for p in ps],
+            *[Crop(p) for p in ps],
+            *[GaussianBlur(w, s) for s in sigmas],
+            JPEGDrop(),
+            JPEGMask(),
+        ]
+    
+    def distort(self, i_co, i_en: torch.FloatTensor) -> torch.FloatTensor:
+        d = random.choice(self.distorioner)
+        return d.distort(i_co, i_en)
+
+
 class Identity(Distortioner):
     def __init__(self):
         super().__init__()

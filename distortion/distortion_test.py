@@ -32,7 +32,7 @@ def main():
         "gaussian_blur": distortion.GaussianBlur(5, 2),
         "jpeg_compression": distortion.JPEGCompression(50),
         "jpeg_mask": distortion.JPEGMask(),
-        "jpeg_drop": distortion.JPEGDrop()
+        "jpeg_drop": distortion.JPEGDrop(),
     }
 
     outs = []
