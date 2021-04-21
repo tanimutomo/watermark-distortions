@@ -1,6 +1,7 @@
 from distortion.distortion import (
     init,
     Distortioner,
+    Combined,
     Identity,
     Dropout,
     Cropout,
