@@ -31,7 +31,7 @@ def init(mean: typing.List[float], std: typing.List[float]):
     STD = std
 
 
-class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
+class Distorter(torch.nn.Module, metaclass=abc.ABCMeta):
     def __init__(self):
         super().__init__()
         self.mean = torch.nn.Parameter(torch.tensor(MEAN)[None, :, None, None], requires_grad=False)
@@ -47,7 +47,7 @@ class Distortioner(torch.nn.Module, metaclass=abc.ABCMeta):
         return x * self.std + self.mean
 
 
-class Combined(Distortioner):
+class Combined(Distorter):
     def __init__(self, ps: typing.List[float], w: int, sigmas: typing.List[float]):
         super().__init__()
         self.distorioner = [
@@ -65,7 +65,7 @@ class Combined(Distortioner):
         return d.distort(i_co, i_en)
 
 
-class Identity(Distortioner):
+class Identity(Distorter):
     def __init__(self):
         super().__init__()
 
@@ -73,7 +73,7 @@ class Identity(Distortioner):
         return i_en
 
 
-class Dropout(Distortioner):
+class Dropout(Distorter):
     def __init__(self, p: float):
         super().__init__()
         self.p = p
@@ -89,7 +89,7 @@ class Dropout(Distortioner):
                            torch.ones(shape), torch.zeros(shape))
 
 
-class Cropout(Distortioner):
+class Cropout(Distorter):
     def __init__(self, p: float):
         super().__init__()
         self.p = p
@@ -117,7 +117,7 @@ class Cropout(Distortioner):
         return mask
 
 
-class Crop(Distortioner):
+class Crop(Distorter):
     def __init__(self, p: float):
         super().__init__()
         self.p = p
@@ -142,7 +142,7 @@ class Crop(Distortioner):
         return ch, cw, center[0], center[1]
 
 
-class Resize(Distortioner):
+class Resize(Distorter):
     def __init__(self, p: float):
         super().__init__()
         self.p = p
@@ -152,7 +152,7 @@ class Resize(Distortioner):
         return F.interpolate(i_en, scale_factor=self.p, recompute_scale_factor=True)
 
 
-class GaussianBlur(Distortioner):
+class GaussianBlur(Distorter):
     def __init__(self, w: int, s: float):
         super().__init__()
         self.w = w
@@ -163,7 +163,7 @@ class GaussianBlur(Distortioner):
         return kornia.filters.gaussian_blur2d(i_en, (self.w, self.w), (self.s, self.s))
 
 
-class JPEGBase(Distortioner):
+class JPEGBase(Distorter):
     def __init__(self):
         super().__init__()
         self.dct_kernel = torch.nn.Parameter(self._create_dct_basis_matrix(), requires_grad=False)
